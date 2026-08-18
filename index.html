@@ -1,0 +1,297 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Presensi QR Jemaat - GBI Pasirian</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  <style>
+    html, body { background-color: #0f172a; color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; min-h-screen; }
+    .card-dark { background: #1e293b; border: 1px solid #334155; border-radius: 16px; }
+  </style>
+</head>
+<body class="p-4 md:p-6 min-h-screen flex flex-col justify-between">
+
+  <script>
+    // =========================================================
+    // TEMPELKAN URL WEB APP GOOGLE APPS SCRIPT KAMU DI SINI
+    // =========================================================
+    const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzLXRnYhMUWvvVcC-DkCHZpyuwTX8Jt14_t0TP8h_TIzZmaqoKCV6zCBP9gOMEj6SqwrQ/exec";
+  </script>
+
+  <div class="max-w-5xl mx-auto w-full space-y-6">
+    
+    <!-- HEADER -->
+    <div class="flex flex-col sm:flex-row justify-between items-center gap-4 bg-slate-950 p-4 rounded-2xl border border-slate-800 shadow-xl">
+      <div class="flex items-center gap-3">
+        <div class="w-10 h-10 rounded-xl bg-gradient-to-tr from-indigo-600 to-emerald-500 flex items-center justify-center text-white text-xl">
+          <i class="fa-solid fa-qrcode"></i>
+        </div>
+        <div>
+          <h1 class="font-extrabold text-base md:text-lg text-white">PRESENSI QR CODE</h1>
+          <p class="text-xs text-slate-400">GBI Pasirian • Portal Presensi Usher</p>
+        </div>
+      </div>
+      
+      <div class="flex items-center gap-3">
+        <select id="sesi-ibadah" class="bg-slate-900 border border-slate-700 text-xs font-bold rounded-xl px-3 py-2 text-indigo-300 outline-none">
+          <option value="Ibadah Umum">Ibadah Umum</option>
+          <option value="Youth">Youth / Pemuda</option>
+          <option value="Sekolah Minggu">Sekolah Minggu</option>
+          <option value="WBI">WBI / Wanita</option>
+        </select>
+        <div class="bg-emerald-950 border border-emerald-800 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-400">
+          <span id="hadir-count" class="text-sm font-mono font-black text-white">0</span> Jiwa
+        </div>
+      </div>
+    </div>
+
+    <!-- MAIN GRID (Side-by-Side Kamera Kiri, Cari Nama Kanan) -->
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+      
+      <!-- LEFT: Live Camera Streamer -->
+      <div class="card-dark p-5">
+        <div class="flex justify-between items-center mb-3">
+          <h2 class="font-bold text-sm text-slate-200 flex items-center gap-2">
+            <i class="fa-solid fa-video text-indigo-400"></i> Pemindai Live Kamera
+          </h2>
+          <select id="camera-select" onchange="switchCamera()" class="text-[11px] bg-slate-900 border border-slate-700 text-slate-300 rounded-lg px-2 py-1 outline-none max-w-[150px]">
+            <option value="">Deteksi Kamera...</option>
+          </select>
+        </div>
+
+        <div class="flex gap-2 mb-3">
+          <button onclick="startNativeCamera()" class="flex-1 bg-indigo-600 hover:bg-indigo-500 text-white py-2 rounded-xl text-xs font-bold transition shadow-lg flex items-center justify-center gap-1.5">
+            <i class="fa-solid fa-power-off"></i> Start Kamera
+          </button>
+          <button onclick="stopNativeCamera()" class="bg-slate-800 hover:bg-slate-700 text-slate-300 px-3 py-2 rounded-xl text-xs font-bold transition">
+            Stop
+          </button>
+        </div>
+
+        <!-- Camera Box -->
+        <div class="relative w-full bg-slate-950 rounded-xl overflow-hidden h-52 flex items-center justify-center border-2 border-slate-800">
+          <video id="video-element" class="w-full h-full object-cover hidden" playsinline></video>
+          <canvas id="qr-canvas" class="hidden"></canvas>
+          <div id="camera-placeholder" class="text-slate-500 text-xs text-center p-4">
+            <i class="fa-solid fa-camera text-3xl mb-2 text-indigo-500/60 block"></i>
+            Klik <b class="text-indigo-400">Start Kamera</b>.<br>Kamera HP/Laptop akan langsung aktif.
+          </div>
+        </div>
+      </div>
+
+      <!-- RIGHT: Manual Search (Lupa Bawa Kartu) -->
+      <div class="card-dark p-5 border-l-4 border-l-amber-500 relative">
+        <h2 class="font-bold text-sm text-amber-400 mb-1 flex items-center gap-2">
+          <i class="fa-solid fa-magnifying-glass"></i> Lupa Bawa Kartu?
+        </h2>
+        <p class="text-xs text-slate-400 mb-3">Cari nama jemaat untuk absen tanpa barcode.</p>
+
+        <div class="relative">
+          <input type="text" id="search-jemaat-input" oninput="searchJemaatManual()" placeholder="Ketik minimal 3 huruf nama..." class="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-amber-500/40 rounded-xl text-xs font-semibold text-white outline-none focus:border-amber-400">
+          <i class="fa-solid fa-user absolute left-3 top-3 text-amber-500/70 text-xs"></i>
+        </div>
+
+        <div id="search-results-container" class="mt-2 max-h-48 overflow-y-auto divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-950 hidden shadow-xl absolute w-[calc(100%-40px)] z-20"></div>
+      </div>
+
+    </div>
+
+    <!-- LOG TABLE REKAP -->
+    <div class="card-dark p-5">
+      <h2 class="font-bold text-sm text-slate-200 mb-3 flex items-center gap-2">
+        <i class="fa-solid fa-list-check text-emerald-400"></i> Log Presensi Masuk (Real-time)
+      </h2>
+      <div class="overflow-x-auto">
+        <table class="w-full text-left text-xs whitespace-nowrap">
+          <thead class="bg-slate-950 text-slate-400 border-b border-slate-800">
+            <tr>
+              <th class="p-2.5">Waktu</th>
+              <th class="p-2.5">ID Jemaat</th>
+              <th class="p-2.5">Nama Lengkap</th>
+              <th class="p-2.5">Ibadah</th>
+              <th class="p-2.5">Status</th>
+            </tr>
+          </thead>
+          <tbody id="log-table-body" class="divide-y divide-slate-800/60 font-mono">
+            <tr><td colspan="5" class="text-center py-8 text-slate-500">Belum ada data presensi yang masuk.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+  </div>
+
+  <audio id="beep-sound" src="https://www.soundjay.com/button/sounds/beep-07a.mp3" preload="auto"></audio>
+
+  <script>
+    let video = document.getElementById('video-element');
+    let canvas = document.getElementById('qr-canvas');
+    let ctx = canvas.getContext('2d');
+    let currentStream = null;
+    let scanning = false;
+    let logData = [];
+    let rawDataJemaat = [];
+
+    window.onload = function() {
+      // Fetch database dari Google Sheets
+      if (GAS_API_URL && !GAS_API_URL.includes("PASTE_URL")) {
+        fetch(GAS_API_URL + "?action=getJemaat")
+          .then(res => res.json())
+          .then(data => { rawDataJemaat = data || []; })
+          .catch(err => console.error("Gagal load data:", err));
+      }
+      populateCameras();
+    };
+
+    async function populateCameras() {
+      try {
+        const devices = await navigator.mediaDevices.enumerateDevices();
+        const videoDevices = devices.filter(device => device.kind === 'videoinput');
+        const select = document.getElementById('camera-select');
+        select.innerHTML = '';
+        videoDevices.forEach((device, index) => {
+          const option = document.createElement('option');
+          option.value = device.deviceId;
+          option.text = device.label || `Kamera ${index + 1}`;
+          select.appendChild(option);
+        });
+      } catch (err) {}
+    }
+
+    async function startNativeCamera() {
+      stopNativeCamera();
+      const deviceId = document.getElementById('camera-select').value;
+      const constraints = { video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" } };
+
+      try {
+        currentStream = await navigator.mediaDevices.getUserMedia(constraints);
+        video.srcObject = currentStream;
+        video.setAttribute("playsinline", true);
+        video.classList.remove('hidden');
+        document.getElementById('camera-placeholder').classList.add('hidden');
+        video.play();
+        scanning = true;
+        requestAnimationFrame(tick);
+      } catch (err) {
+        alert("Gagal membuka kamera: " + err.message);
+      }
+    }
+
+    function stopNativeCamera() {
+      scanning = false;
+      if (currentStream) {
+        currentStream.getTracks().forEach(track => track.stop());
+        currentStream = null;
+      }
+      video.classList.add('hidden');
+      document.getElementById('camera-placeholder').classList.remove('hidden');
+    }
+
+    function switchCamera() { if (scanning) startNativeCamera(); }
+
+    function tick() {
+      if (!scanning) return;
+      if (video.readyState === video.HAVE_ENOUGH_DATA) {
+        canvas.height = video.videoHeight;
+        canvas.width = video.videoWidth;
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        let code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
+
+        if (code && code.data) {
+          playBeep();
+          processAttendance(code.data);
+          scanning = false;
+          setTimeout(() => { scanning = true; requestAnimationFrame(tick); }, 2500);
+          return;
+        }
+      }
+      requestAnimationFrame(tick);
+    }
+
+    function playBeep() {
+      const beep = document.getElementById('beep-sound');
+      beep.currentTime = 0;
+      beep.play().catch(e => {});
+    }
+
+    function processAttendance(qrCodeMessage) {
+      let sesi = document.getElementById('sesi-ibadah').value;
+      let waktu = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+      
+      let nama = "Mencari...";
+      let match = rawDataJemaat.find(d => d.id_jemaat.toUpperCase() === qrCodeMessage.toUpperCase());
+      if(match) nama = match.nama_lengkap;
+
+      let tbody = document.getElementById('log-table-body');
+      if(logData.length === 0) tbody.innerHTML = '';
+      
+      let trId = 'row-' + Date.now();
+      let tr = document.createElement('tr');
+      tr.id = trId;
+      tr.className = "hover:bg-slate-800/80 transition";
+      tr.innerHTML = `
+        <td class="p-2.5 text-emerald-400 font-bold">${waktu}</td>
+        <td class="p-2.5 text-indigo-300 font-bold">${qrCodeMessage}</td>
+        <td class="p-2.5 text-slate-100 font-sans font-bold">${nama}</td>
+        <td class="p-2.5 text-slate-400">${sesi}</td>
+        <td class="p-2.5" id="status-${trId}"><span class="px-2 py-0.5 bg-amber-950 text-amber-400 border border-amber-800 rounded text-[10px] font-bold"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Menyimpan...</span></td>
+      `;
+      tbody.insertBefore(tr, tbody.firstChild);
+
+      logData.push({id: qrCodeMessage, nama: nama});
+      document.getElementById('hadir-count').innerText = logData.length;
+
+      // Send to GAS
+      fetch(GAS_API_URL, {
+        method: 'POST',
+        mode: 'no-cors',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ id_jemaat: qrCodeMessage, sesi: sesi })
+      }).then(() => {
+        document.getElementById('status-' + trId).innerHTML = `<span class="px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded text-[10px] font-bold"><i class="fa-solid fa-check mr-1"></i>Tersimpan</span>`;
+      }).catch(err => {
+        document.getElementById('status-' + trId).innerHTML = `<span class="px-2 py-0.5 bg-rose-950 text-rose-400 border border-rose-800 rounded text-[10px] font-bold"><i class="fa-solid fa-xmark mr-1"></i>Gagal</span>`;
+      });
+    }
+
+    function searchJemaatManual() {
+      let query = document.getElementById('search-jemaat-input').value.toLowerCase().trim();
+      let container = document.getElementById('search-results-container');
+      
+      if (query.length < 3) { container.classList.add('hidden'); return; }
+
+      let matches = rawDataJemaat.filter(d => 
+        (d.nama_lengkap || '').toLowerCase().includes(query) || 
+        (d.id_jemaat || '').toLowerCase().includes(query)
+      ).slice(0, 6);
+
+      if (matches.length === 0) {
+        container.innerHTML = `<div class="p-3 text-xs text-slate-500 text-center">Jemaat tidak ditemukan.</div>`;
+      } else {
+        container.innerHTML = matches.map(d => `
+          <div class="p-2.5 flex justify-between items-center hover:bg-slate-900 border-b border-slate-800/60 last:border-0">
+            <div>
+              <div class="font-bold text-xs text-amber-200">${d.nama_lengkap}</div>
+              <div class="text-[10px] text-slate-400 font-mono">${d.id_jemaat}</div>
+            </div>
+            <button onclick="submitManual('${d.id_jemaat}')" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg">
+              Hadir
+            </button>
+          </div>
+        `).join('');
+      }
+      container.classList.remove('hidden');
+    }
+
+    function submitManual(idJemaat) {
+      processAttendance(idJemaat);
+      document.getElementById('search-jemaat-input').value = '';
+      document.getElementById('search-results-container').classList.add('hidden');
+    }
+  </script>
+</body>
+</html>
