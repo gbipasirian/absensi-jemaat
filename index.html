@@ -4,11 +4,16 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Presensi QR Jemaat - GBI Pasirian</title>
+  
+  <!-- Tailwind CSS -->
   <script src="https://cdn.tailwindcss.com"></script>
+  <!-- FontAwesome -->
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <!-- jsQR Library untuk Kamera -->
   <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.min.js"></script>
+  
   <style>
-    html, body { background-color: #0f172a; color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; min-h-screen; }
+    html, body { background-color: #0f172a; color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; min-height: 100vh; }
     .card-dark { background: #1e293b; border: 1px solid #334155; border-radius: 16px; }
   </style>
 </head>
@@ -17,6 +22,7 @@
   <script>
     // =========================================================
     // TEMPELKAN URL WEB APP GOOGLE APPS SCRIPT KAMU DI SINI
+    // Pastikan hak akses di GAS diset ke "Anyone" (Siapa Saja)
     // =========================================================
     const GAS_API_URL = "https://script.google.com/macros/s/AKfycbzLXRnYhMUWvvVcC-DkCHZpyuwTX8Jt14_t0TP8h_TIzZmaqoKCV6zCBP9gOMEj6SqwrQ/exec";
   </script>
@@ -41,6 +47,7 @@
           <option value="Youth">Youth / Pemuda</option>
           <option value="Sekolah Minggu">Sekolah Minggu</option>
           <option value="WBI">WBI / Wanita</option>
+          <option value="Lansia">Lansia</option>
         </select>
         <div class="bg-emerald-950 border border-emerald-800 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-400">
           <span id="hadir-count" class="text-sm font-mono font-black text-white">0</span> Jiwa
@@ -52,7 +59,7 @@
     <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
       
       <!-- LEFT: Live Camera Streamer -->
-      <div class="card-dark p-5">
+      <div class="card-dark p-5 shadow-lg">
         <div class="flex justify-between items-center mb-3">
           <h2 class="font-bold text-sm text-slate-200 flex items-center gap-2">
             <i class="fa-solid fa-video text-indigo-400"></i> Pemindai Live Kamera
@@ -83,24 +90,25 @@
       </div>
 
       <!-- RIGHT: Manual Search (Lupa Bawa Kartu) -->
-      <div class="card-dark p-5 border-l-4 border-l-amber-500 relative">
+      <div class="card-dark p-5 border-l-4 border-l-amber-500 relative shadow-lg flex flex-col">
         <h2 class="font-bold text-sm text-amber-400 mb-1 flex items-center gap-2">
           <i class="fa-solid fa-magnifying-glass"></i> Lupa Bawa Kartu?
         </h2>
         <p class="text-xs text-slate-400 mb-3">Cari nama jemaat untuk absen tanpa barcode.</p>
 
         <div class="relative">
-          <input type="text" id="search-jemaat-input" oninput="searchJemaatManual()" placeholder="Ketik minimal 3 huruf nama..." class="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-amber-500/40 rounded-xl text-xs font-semibold text-white outline-none focus:border-amber-400">
+          <input type="text" id="search-jemaat-input" oninput="searchJemaatManual()" placeholder="Tunggu, mengambil database..." class="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-amber-500/40 rounded-xl text-xs font-semibold text-white outline-none focus:border-amber-400 transition">
           <i class="fa-solid fa-user absolute left-3 top-3 text-amber-500/70 text-xs"></i>
         </div>
 
+        <!-- Wadah Hasil Pencarian -->
         <div id="search-results-container" class="mt-2 max-h-48 overflow-y-auto divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-950 hidden shadow-xl absolute w-[calc(100%-40px)] z-20"></div>
       </div>
 
     </div>
 
     <!-- LOG TABLE REKAP -->
-    <div class="card-dark p-5">
+    <div class="card-dark p-5 shadow-lg">
       <h2 class="font-bold text-sm text-slate-200 mb-3 flex items-center gap-2">
         <i class="fa-solid fa-list-check text-emerald-400"></i> Log Presensi Masuk (Real-time)
       </h2>
@@ -124,8 +132,10 @@
 
   </div>
 
+  <!-- Audio Beep -->
   <audio id="beep-sound" src="https://www.soundjay.com/button/sounds/beep-07a.mp3" preload="auto"></audio>
 
+  <!-- ==================== LOGIC JAVASCRIPT ==================== -->
   <script>
     let video = document.getElementById('video-element');
     let canvas = document.getElementById('qr-canvas');
@@ -136,12 +146,25 @@
     let rawDataJemaat = [];
 
     window.onload = function() {
-      // Fetch database dari Google Sheets
+      // 1. Ambil Database dengan Bypass CORS
       if (GAS_API_URL && !GAS_API_URL.includes("PASTE_URL")) {
         fetch(GAS_API_URL + "?action=getJemaat")
-          .then(res => res.json())
-          .then(data => { rawDataJemaat = data || []; })
-          .catch(err => console.error("Gagal load data:", err));
+          .then(res => {
+            if (!res.ok) throw new Error("Gagal mengambil data dari server");
+            return res.json();
+          })
+          .then(data => { 
+            rawDataJemaat = data || []; 
+            console.log("Database berhasil dimuat: " + rawDataJemaat.length + " jemaat");
+            if(rawDataJemaat.length > 0) {
+              document.getElementById('search-jemaat-input').placeholder = "Database siap. Ketik nama...";
+            }
+          })
+          .catch(err => {
+            console.error("Gagal load data:", err);
+            document.getElementById('search-jemaat-input').placeholder = "Gagal memuat database!";
+            alert("GAGAL KONEK KE DATABASE!\n\nPastikan di Google Apps Script:\n1. Execute as: Me\n2. Who has access: Anyone (Siapa saja)");
+          });
       }
       populateCameras();
     };
@@ -152,13 +175,25 @@
         const videoDevices = devices.filter(device => device.kind === 'videoinput');
         const select = document.getElementById('camera-select');
         select.innerHTML = '';
+        
+        let backCameraFound = false;
+        
         videoDevices.forEach((device, index) => {
           const option = document.createElement('option');
           option.value = device.deviceId;
-          option.text = device.label || `Kamera ${index + 1}`;
+          let label = device.label || `Kamera ${index + 1}`;
+          option.text = label;
           select.appendChild(option);
+          
+          // Pilih otomatis kamera belakang (environment) jika ada
+          if (label.toLowerCase().includes('back') || label.toLowerCase().includes('belakang')) {
+            select.value = device.deviceId;
+            backCameraFound = true;
+          }
         });
-      } catch (err) {}
+      } catch (err) {
+        console.error("Kamera tidak ditemukan:", err);
+      }
     }
 
     async function startNativeCamera() {
@@ -176,7 +211,7 @@
         scanning = true;
         requestAnimationFrame(tick);
       } catch (err) {
-        alert("Gagal membuka kamera: " + err.message);
+        alert("Gagal membuka kamera. Pastikan izin kamera diberikan di browser!");
       }
     }
 
@@ -199,12 +234,15 @@
         canvas.width = video.videoWidth;
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+        
+        // Scan QR menggunakan jsQR
         let code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
 
         if (code && code.data) {
           playBeep();
           processAttendance(code.data);
           scanning = false;
+          // Jeda 2.5 detik sebelum bisa scan kartu berikutnya (Mencegah absen dobel beruntun)
           setTimeout(() => { scanning = true; requestAnimationFrame(tick); }, 2500);
           return;
         }
@@ -215,19 +253,19 @@
     function playBeep() {
       const beep = document.getElementById('beep-sound');
       beep.currentTime = 0;
-      beep.play().catch(e => {});
+      beep.play().catch(e => console.log("Audio play di-block oleh browser:", e));
     }
 
     function processAttendance(qrCodeMessage) {
       let sesi = document.getElementById('sesi-ibadah').value;
       let waktu = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       
-      let nama = "Mencari...";
+      let nama = "ID Tidak Terdaftar";
       let match = rawDataJemaat.find(d => d.id_jemaat.toUpperCase() === qrCodeMessage.toUpperCase());
       if(match) nama = match.nama_lengkap;
 
       let tbody = document.getElementById('log-table-body');
-      if(logData.length === 0) tbody.innerHTML = '';
+      if(logData.length === 0) tbody.innerHTML = ''; // Hapus pesan kosong
       
       let trId = 'row-' + Date.now();
       let tr = document.createElement('tr');
@@ -238,23 +276,30 @@
         <td class="p-2.5 text-indigo-300 font-bold">${qrCodeMessage}</td>
         <td class="p-2.5 text-slate-100 font-sans font-bold">${nama}</td>
         <td class="p-2.5 text-slate-400">${sesi}</td>
-        <td class="p-2.5" id="status-${trId}"><span class="px-2 py-0.5 bg-amber-950 text-amber-400 border border-amber-800 rounded text-[10px] font-bold"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Menyimpan...</span></td>
+        <td class="p-2.5" id="status-${trId}"><span class="px-2 py-0.5 bg-amber-950 text-amber-400 border border-amber-800 rounded text-[10px] font-bold"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Kirim...</span></td>
       `;
-      tbody.insertBefore(tr, tbody.firstChild);
+      tbody.insertBefore(tr, tbody.firstChild); // Insert di urutan teratas
 
       logData.push({id: qrCodeMessage, nama: nama});
       document.getElementById('hadir-count').innerText = logData.length;
 
-      // Send to GAS
+      // 2. Kirim Data Absen dengan Trik Tembus CORS (Menggunakan text/plain)
       fetch(GAS_API_URL, {
         method: 'POST',
-        mode: 'no-cors',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Wajib text/plain agar browser tidak memblokir pengiriman POST
         body: JSON.stringify({ id_jemaat: qrCodeMessage, sesi: sesi })
-      }).then(() => {
-        document.getElementById('status-' + trId).innerHTML = `<span class="px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded text-[10px] font-bold"><i class="fa-solid fa-check mr-1"></i>Tersimpan</span>`;
-      }).catch(err => {
-        document.getElementById('status-' + trId).innerHTML = `<span class="px-2 py-0.5 bg-rose-950 text-rose-400 border border-rose-800 rounded text-[10px] font-bold"><i class="fa-solid fa-xmark mr-1"></i>Gagal</span>`;
+      })
+      .then(res => res.json())
+      .then(res => {
+        if(res.status === 'success') {
+          document.getElementById('status-' + trId).innerHTML = `<span class="px-2 py-0.5 bg-emerald-950 text-emerald-400 border border-emerald-800 rounded text-[10px] font-bold"><i class="fa-solid fa-check mr-1"></i>Sukses</span>`;
+        } else {
+          document.getElementById('status-' + trId).innerHTML = `<span class="px-2 py-0.5 bg-rose-950 text-rose-400 border border-rose-800 rounded text-[10px] font-bold">Error Server</span>`;
+        }
+      })
+      .catch(err => {
+        console.error("Gagal kirim absen:", err);
+        document.getElementById('status-' + trId).innerHTML = `<span class="px-2 py-0.5 bg-rose-950 text-rose-400 border border-rose-800 rounded text-[10px] font-bold"><i class="fa-solid fa-wifi mr-1"></i>Gagal Jaringan</span>`;
       });
     }
 
@@ -278,8 +323,8 @@
               <div class="font-bold text-xs text-amber-200">${d.nama_lengkap}</div>
               <div class="text-[10px] text-slate-400 font-mono">${d.id_jemaat}</div>
             </div>
-            <button onclick="submitManual('${d.id_jemaat}')" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg">
-              Hadir
+            <button onclick="submitManual('${d.id_jemaat}')" class="px-2.5 py-1 bg-amber-600 hover:bg-amber-500 text-white text-xs font-bold rounded-lg shadow-md transition">
+              <i class="fa-solid fa-check"></i> Hadir
             </button>
           </div>
         `).join('');
