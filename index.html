@@ -15,6 +15,11 @@
   <style>
     html, body { background-color: #0f172a; color: #f8fafc; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; min-height: 100vh; }
     .card-dark { background: #1e293b; border: 1px solid #334155; border-radius: 16px; }
+    /* Efek mirror khusus kamera depan */
+    .mirror-mode {
+      transform: scaleX(-1);
+      -webkit-transform: scaleX(-1);
+    }
   </style>
 </head>
 <body class="p-4 md:p-6 min-h-screen flex flex-col justify-between">
@@ -175,20 +180,12 @@
         const select = document.getElementById('camera-select');
         select.innerHTML = '';
         
-        let backCameraFound = false;
-        
         videoDevices.forEach((device, index) => {
           const option = document.createElement('option');
           option.value = device.deviceId;
           let label = device.label || `Kamera ${index + 1}`;
           option.text = label;
           select.appendChild(option);
-          
-          // Pilih otomatis kamera belakang (environment) jika ada
-          if (label.toLowerCase().includes('back') || label.toLowerCase().includes('belakang')) {
-            select.value = device.deviceId;
-            backCameraFound = true;
-          }
         });
       } catch (err) {
         console.error("Kamera tidak ditemukan:", err);
@@ -197,13 +194,31 @@
 
     async function startNativeCamera() {
       stopNativeCamera();
-      const deviceId = document.getElementById('camera-select').value;
-      const constraints = { video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "environment" } };
+      const select = document.getElementById('camera-select');
+      const deviceId = select.value;
+      const selectedOption = select.options[select.selectedIndex];
+      const cameraLabel = selectedOption ? selectedOption.text.toLowerCase() : '';
+
+      const constraints = { video: deviceId ? { deviceId: { exact: deviceId } } : { facingMode: "user" } };
 
       try {
         currentStream = await navigator.mediaDevices.getUserMedia(constraints);
         video.srcObject = currentStream;
         video.setAttribute("playsinline", true);
+        
+        // Deteksi apakah kamera depan (front / user / selfie)
+        let isFront = cameraLabel.includes('front') || 
+                      cameraLabel.includes('depan') || 
+                      cameraLabel.includes('user') || 
+                      cameraLabel.includes('selfie') ||
+                      (!cameraLabel.includes('back') && !cameraLabel.includes('belakang') && !deviceId);
+
+        if (isFront) {
+          video.classList.add('mirror-mode');
+        } else {
+          video.classList.remove('mirror-mode');
+        }
+
         video.classList.remove('hidden');
         document.getElementById('camera-placeholder').classList.add('hidden');
         video.play();
