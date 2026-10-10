@@ -46,7 +46,7 @@
         </div>
       </div>
       
-      <div class="flex items-center gap-3">
+      <div class="flex items-center gap-4">
         <select id="sesi-ibadah" class="bg-slate-900 border border-slate-700 text-xs font-bold rounded-xl px-3 py-2 text-indigo-300 outline-none">
           <option value="Umum">Umum</option>
           <option value="Rabu">Rabu</option>
@@ -55,8 +55,11 @@
           <option value="WBI">WBI / Wanita</option>
           <option value="Lansia">Lansia</option>
         </select>
-        <div class="bg-emerald-950 border border-emerald-800 px-3 py-1.5 rounded-xl text-xs font-bold text-emerald-400">
-          <span id="hadir-count" class="text-sm font-mono font-black text-white">0</span> Jiwa
+        
+        <!-- TAMPILAN ANGKA JIWA YANG DIPERBESAR -->
+        <div class="bg-emerald-950/80 border border-emerald-700/80 px-4 py-1.5 rounded-2xl flex items-center gap-2 shadow-inner">
+          <span id="hadir-count" class="text-3xl md:text-4xl font-mono font-black text-emerald-400 leading-none">0</span>
+          <span class="text-[10px] font-extrabold text-emerald-200 uppercase tracking-wider leading-tight">Jiwa<br>Hadir</span>
         </div>
       </div>
     </div>
@@ -103,15 +106,16 @@
         <p class="text-xs text-slate-400 mb-3">Cari nama jemaat untuk absen tanpa barcode.</p>
 
         <div class="relative">
-        <input type="text" id="search-jemaat-input" oninput="searchJemaatManual()" placeholder="Tunggu, mengambil database..." class="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-amber-500/40 rounded-xl text-xs font-semibold text-white outline-none focus:border-amber-400">
-        <i class="fa-solid fa-user absolute left-3 top-3 text-amber-500/70 text-xs"></i>
-      
-        <!-- Wadah Hasil Pencarian (Di dalam div relative agar posisinya pas di bawah input) -->
-        <div id="search-results-container" class="top-full left-0 w-full mt-2 max-h-48 overflow-y-auto divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-950 hidden shadow-xl absolute z-20"></div>
+          <input type="text" id="search-jemaat-input" oninput="searchJemaatManual()" placeholder="Tunggu, mengambil database..." class="w-full pl-9 pr-3 py-2.5 bg-slate-950 border border-amber-500/40 rounded-xl text-xs font-semibold text-white outline-none focus:border-amber-400">
+          <i class="fa-solid fa-user absolute left-3 top-3 text-amber-500/70 text-xs"></i>
+        
+          <!-- Wadah Hasil Pencarian -->
+          <div id="search-results-container" class="top-full left-0 w-full mt-2 max-h-48 overflow-y-auto divide-y divide-slate-800 rounded-xl border border-slate-800 bg-slate-950 hidden shadow-xl absolute z-20"></div>
+        </div>
       </div>
-    </div>
 
     </div>
+
     <!-- LOG TABLE REKAP -->
     <div class="card-dark p-5 shadow-lg">
       <h2 class="font-bold text-sm text-slate-200 mb-3 flex items-center gap-2">
@@ -137,9 +141,6 @@
 
   </div>
 
-  <!-- Audio Beep -->
-  <audio id="beep-sound" src="https://www.soundjay.com/button/sounds/beep-07a.mp3" preload="auto"></audio>
-
   <!-- ==================== LOGIC JAVASCRIPT ==================== -->
   <script>
     let video = document.getElementById('video-element');
@@ -151,7 +152,6 @@
     let rawDataJemaat = [];
 
     window.onload = function() {
-      // 1. Ambil Database dengan Bypass CORS
       if (GAS_API_URL && !GAS_API_URL.includes("PASTE_URL")) {
         fetch(GAS_API_URL + "?action=getJemaat")
           .then(res => {
@@ -207,7 +207,6 @@
         video.srcObject = currentStream;
         video.setAttribute("playsinline", true);
         
-        // Deteksi apakah kamera depan (front / user / selfie)
         let isFront = cameraLabel.includes('front') || 
                       cameraLabel.includes('depan') || 
                       cameraLabel.includes('user') || 
@@ -250,14 +249,11 @@
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
         let imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
         
-        // Scan QR menggunakan jsQR
         let code = jsQR(imageData.data, imageData.width, imageData.height, { inversionAttempts: "dontInvert" });
 
         if (code && code.data) {
-          playBeep();
           processAttendance(code.data);
           scanning = false;
-          // Jeda 2.5 detik sebelum bisa scan kartu berikutnya (Mencegah absen dobel beruntun)
           setTimeout(() => { scanning = true; requestAnimationFrame(tick); }, 2500);
           return;
         }
@@ -265,13 +261,32 @@
       requestAnimationFrame(tick);
     }
 
+    // Fungsi Suara Beep berbasis Web Audio API (Tanpa butuh file MP3 eksternal)
     function playBeep() {
-      const beep = document.getElementById('beep-sound');
-      beep.currentTime = 0;
-      beep.play().catch(e => console.log("Audio play di-block oleh browser:", e));
+      try {
+        const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, audioCtx.currentTime); // Frekuensi 880Hz (Nada A5, khas scanner barcode)
+        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.18);
+        
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.18);
+      } catch (e) {
+        console.log("Audio tidak didukung atau terblokir browser:", e);
+      }
     }
 
     function processAttendance(qrCodeMessage) {
+      // Bunyikan beep setiap kali presensi diproses
+      playBeep();
+
       let sesi = document.getElementById('sesi-ibadah').value;
       let waktu = new Date().toLocaleTimeString('id-ID', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
       
@@ -280,7 +295,7 @@
       if(match) nama = match.nama_lengkap;
 
       let tbody = document.getElementById('log-table-body');
-      if(logData.length === 0) tbody.innerHTML = ''; // Hapus pesan kosong
+      if(logData.length === 0) tbody.innerHTML = '';
       
       let trId = 'row-' + Date.now();
       let tr = document.createElement('tr');
@@ -293,15 +308,14 @@
         <td class="p-2.5 text-slate-400">${sesi}</td>
         <td class="p-2.5" id="status-${trId}"><span class="px-2 py-0.5 bg-amber-950 text-amber-400 border border-amber-800 rounded text-[10px] font-bold"><i class="fa-solid fa-spinner fa-spin mr-1"></i>Kirim...</span></td>
       `;
-      tbody.insertBefore(tr, tbody.firstChild); // Insert di urutan teratas
+      tbody.insertBefore(tr, tbody.firstChild);
 
       logData.push({id: qrCodeMessage, nama: nama});
       document.getElementById('hadir-count').innerText = logData.length;
 
-      // 2. Kirim Data Absen dengan Trik Tembus CORS (Menggunakan text/plain)
       fetch(GAS_API_URL, {
         method: 'POST',
-        headers: { 'Content-Type': 'text/plain;charset=utf-8' }, // Wajib text/plain agar browser tidak memblokir pengiriman POST
+        headers: { 'Content-Type': 'text/plain;charset=utf-8' },
         body: JSON.stringify({ id_jemaat: qrCodeMessage, sesi: sesi })
       })
       .then(res => res.json())
