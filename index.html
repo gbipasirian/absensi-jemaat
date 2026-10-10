@@ -268,9 +268,9 @@
         const osc = audioCtx.createOscillator();
         const gain = audioCtx.createGain();
         
-        osc.type = 'sine';
+        osc.type = 'square';
         osc.frequency.setValueAtTime(880, audioCtx.currentTime); // Frekuensi 880Hz (Nada A5, khas scanner barcode)
-        gain.gain.setValueAtTime(0.15, audioCtx.currentTime);
+        gain.gain.setValueAtTime(0.5, audioCtx.currentTime);
         gain.gain.exponentialRampToValueAtTime(0.00001, audioCtx.currentTime + 0.18);
         
         osc.connect(gain);
